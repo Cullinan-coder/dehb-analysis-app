@@ -14,19 +14,14 @@ export default function OnboardingScreen() {
     if (!childName || !childAge) return;
 
     setLoading(true);
-
-    // Supabase'e kaydet
     const child = await createChild(parseInt(childAge));
 
     if (child) {
       setChild(child.id, parseInt(childAge));
       router.replace('/');
     } else {
-      // Supabase bağlantısı yoksa bile devam et
-      setChild(childName, parseInt(childAge));
-      router.replace('/');
+      alert('Bağlantı sorunu, tekrar dene.');
     }
-
     setLoading(false);
   };
 

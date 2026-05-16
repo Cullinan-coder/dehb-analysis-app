@@ -11,6 +11,7 @@ import {
   endSession as endSessionDB,
   saveBehavioralEvent,
 } from '../../services/session';
+import { upsertGameScore } from '../../services/childScores';
 import { formatDuration } from '../../utils/formatDuration';
 
 const BUBBLES_TOTAL_ROUNDS = 5;
@@ -31,6 +32,8 @@ export default function BubblesScreen() {
     showBreakModal,
     setShowBreakModal,
     clearAdaptiveDecision,
+    scoreRowId,
+    setScoreRowId,
   } = useGameStore();
 
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
@@ -106,6 +109,20 @@ export default function BubblesScreen() {
     if (dbSessionId) {
       await endSessionDB(dbSessionId, focusScore, durationMs);
       setDbSessionId(null);
+    }
+
+    // Write weighted score to child_scores
+    if (childId && childAge !== null) {
+      const result = await upsertGameScore({
+        scoreRowId,
+        childId,
+        age: childAge,
+        gameRoute: 'bubbles',
+        correctCount,
+      });
+      if (result.scoreRowId) {
+        setScoreRowId(result.scoreRowId);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import {
   endSession as endSessionDB,
   saveBehavioralEvent,
 } from '../../services/session';
+import { upsertGameScore } from '../../services/childScores';
 import { formatDuration } from '../../utils/formatDuration';
 
 export default function FrogJumpScreen() {
@@ -30,6 +31,8 @@ export default function FrogJumpScreen() {
     showBreakModal,
     setShowBreakModal,
     clearAdaptiveDecision,
+    scoreRowId,
+    setScoreRowId,
   } = useGameStore();
 
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
@@ -107,6 +110,20 @@ export default function FrogJumpScreen() {
     if (dbSessionId) {
       await endSessionDB(dbSessionId, focusScore, durationMs);
       setDbSessionId(null);
+    }
+
+    // Write weighted score to child_scores
+    if (childId && childAge !== null) {
+      const result = await upsertGameScore({
+        scoreRowId,
+        childId,
+        age: childAge,
+        gameRoute: 'frog-jump',
+        correctCount,
+      });
+      if (result.scoreRowId) {
+        setScoreRowId(result.scoreRowId);
+      }
     }
   }
 

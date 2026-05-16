@@ -5,6 +5,7 @@ interface GameState {
   // Çocuk bilgisi
   childId: string | null;
   childAge: number | null;
+  scoreRowId: string | null;
 
   // Oturum
   sessionId: string | null;
@@ -43,12 +44,14 @@ interface GameState {
   clearAdaptiveDecision: () => void;
   setLetterHuntDifficulty: (difficulty: 'easy' | 'medium' | 'hard') => void;
   setShowBreakModal: (show: boolean) => void;
+  setScoreRowId: (id: string | null) => void;
   reset: () => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
   childId: null,
   childAge: null,
+  scoreRowId: null,
   sessionId: null,
   sessionStarted: false,
   focusScore: 100,
@@ -81,6 +84,7 @@ export const useGameStore = create<GameState>((set) => ({
   endSession: () => set({
     sessionId: null,
     sessionStarted: false,
+    scoreRowId: null,
   }),
 
   updateFocusScore: (score) => set({ focusScore: score }),
@@ -118,9 +122,12 @@ export const useGameStore = create<GameState>((set) => ({
     showBreakModal: show,
   }),
 
+  setScoreRowId: (id) => set({ scoreRowId: id }),
+
   reset: () => set({
     sessionId: null,
     sessionStarted: false,
+    scoreRowId: null,
     focusScore: 100,
     completedTasks: 0,
     totalTasks: 10,
@@ -133,4 +140,5 @@ export const useGameStore = create<GameState>((set) => ({
     letterHuntDifficulty: 'medium',
     showBreakModal: false,
   }),
+  
 }));

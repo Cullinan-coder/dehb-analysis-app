@@ -6,6 +6,7 @@ import { usePreExit } from '../../hooks/usePreExit';
 import { LetterHuntScene } from '../../games/letterHunt/LetterHuntScene';
 import { LetterTapResult } from '../../games/letterHunt/types';
 import { createSession, endSession as endSessionDB, saveBehavioralEvent } from '../../services/session';
+import { upsertGameScore } from '../../services/childScores';
 import { formatDuration } from '../../utils/formatDuration';
 
 export default function LetterHuntScreen() {
@@ -28,6 +29,8 @@ export default function LetterHuntScreen() {
     clearAdaptiveDecision,
     letterHuntDifficulty,
     setLetterHuntDifficulty,
+    scoreRowId,
+    setScoreRowId,
   } = useGameStore();
 
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
@@ -116,6 +119,20 @@ export default function LetterHuntScreen() {
     if (dbSessionId) {
       await endSessionDB(dbSessionId, focusScore, durationMs);
       setDbSessionId(null);
+    }
+
+    // Write weighted score to child_scores
+    if (childId && childAge !== null) {
+      const result = await upsertGameScore({
+        scoreRowId,
+        childId,
+        age: childAge,
+        gameRoute: 'letter-hunt',
+        correctCount,
+      });
+      if (result.scoreRowId) {
+        setScoreRowId(result.scoreRowId);
+      }
     }
   }
 
