@@ -2,54 +2,44 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../../stores/gameStore';
-import { BubblesScene } from '../../games/bubbles/BubblesScene';
-import { BubbleTapResult } from '../../games/bubbles/types';
-import { calculatePerformance } from '../../games/bubbles/logic';
+import { RhythmScene } from '../../games/rhythm/RhythmScene';
+import { BeatResult } from '../../games/rhythm/types';
+import { calculatePerformance } from '../../games/rhythm/logic';
 import { upsertGameScore } from '../../services/childScores';
 
 type Phase = 'intro' | 'playing' | 'complete';
 
-export default function BubblesScreen() {
+export default function RhythmScreen() {
   const { childId, childAge, scoreRowId, setScoreRowId, markGameCompleted } = useGameStore();
   const [phase, setPhase] = useState<Phase>('intro');
-  const correctHitsRef = useRef(0);
-  const correctRejectsRef = useRef(0);
-  const totalBubblesRef = useRef(0);
-  const [displayCorrect, setDisplayCorrect] = useState(0);
-  const [displayTotal, setDisplayTotal] = useState(0);
+  const resultsRef = useRef<BeatResult[]>([]);
+  const [displayAvg, setDisplayAvg] = useState(0);
 
   useEffect(() => {
     if (!childId) router.replace('/onboarding');
   }, [childId]);
 
   function handleStart() {
-    correctHitsRef.current = 0;
-    correctRejectsRef.current = 0;
-    totalBubblesRef.current = 0;
+    resultsRef.current = [];
     setPhase('playing');
   }
 
-  function handleBubbleResult(result: BubbleTapResult) {
-    totalBubblesRef.current += 1;
-    if (result.type === 'correct_hit') correctHitsRef.current += 1;
-    if (result.type === 'correct_reject') correctRejectsRef.current += 1;
+  function handleBeatResult(result: BeatResult) {
+    resultsRef.current.push(result);
   }
 
   async function handleGameComplete() {
-    const correct = correctHitsRef.current + correctRejectsRef.current;
-    const total = totalBubblesRef.current;
-    setDisplayCorrect(correct);
-    setDisplayTotal(total);
+    const performance = calculatePerformance(resultsRef.current);
+    setDisplayAvg(Math.round(performance));
     setPhase('complete');
     if (childId && childAge !== null) {
-      const performance = calculatePerformance(correctHitsRef.current, correctRejectsRef.current, total);
       const result = await upsertGameScore({
         scoreRowId, childId, age: childAge,
-        gameRoute: 'bubbles',
+        gameRoute: 'rhythm',
         performance,
       });
       if (result.scoreRowId) setScoreRowId(result.scoreRowId);
-      markGameCompleted('game2');
+      markGameCompleted('game4');
     }
   }
 
@@ -64,9 +54,9 @@ export default function BubblesScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.intro}>
-          <Text style={styles.introEmoji}>🫧</Text>
-          <Text style={styles.introTitle}>Harf Baloncukları</Text>
-          <Text style={styles.introDesc}>Sadece SESLİ harfli (A, E, I, İ, O, Ö, U, Ü) baloncukları patlat. Sessizlere dokunma!</Text>
+          <Text style={styles.introEmoji}>🥁</Text>
+          <Text style={styles.introTitle}>Ritim Ustası</Text>
+          <Text style={styles.introDesc}>Yanıp sönen daireye ritimle dokun. Tam zamanında olmaya çalış!</Text>
           <TouchableOpacity style={styles.startButton} onPress={handleStart}>
             <Text style={styles.startButtonText}>Başla</Text>
           </TouchableOpacity>
@@ -84,7 +74,7 @@ export default function BubblesScreen() {
         <View style={styles.complete}>
           <Text style={styles.completeEmoji}>🎉</Text>
           <Text style={styles.completeTitle}>Tebrikler!</Text>
-          <Text style={styles.completeScore}>Doğru karar: {displayCorrect}/{displayTotal}</Text>
+          <Text style={styles.completeScore}>Ritim ortalaman: {displayAvg}/100</Text>
           <TouchableOpacity style={styles.startButton} onPress={() => router.replace('/')}>
             <Text style={styles.startButtonText}>Ana ekrana dön</Text>
           </TouchableOpacity>
@@ -96,12 +86,12 @@ export default function BubblesScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.progress}>Görev: Sesli harfleri patlat!</Text>
+        <Text style={styles.progress}>Görev: Ritmi yakala</Text>
         <TouchableOpacity onPress={handleExit}>
           <Text style={styles.exitBtn}>× Çık</Text>
         </TouchableOpacity>
       </View>
-      <BubblesScene onBubbleResult={handleBubbleResult} onGameComplete={handleGameComplete} />
+      <RhythmScene onBeatResult={handleBeatResult} onGameComplete={handleGameComplete} />
     </SafeAreaView>
   );
 }

@@ -1,183 +1,126 @@
-import { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, LayoutChangeEvent } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSequence,
-  withSpring,
-  runOnJS,
-  Easing,
-} from 'react-native-reanimated';
-
-import {
-  createRound,
-  spawnBubble,
-  getConfigForDifficulty,
-  DIFFICULTY_PRESETS,
-  ROUND_TARGETS,
-} from './logic';
-import {
-  BubblesRound,
-  BubbleTapResult,
-  BubblesDifficulty,
-  Bubble,
-} from './types';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated';
+import { spawnBubble, DEFAULT_CONFIG, isVowel } from './logic';
+import { Bubble, BubbleTapResult } from './types';
 
 type Props = {
-  difficulty: BubblesDifficulty;
-  onRoundComplete: (result: BubbleTapResult, roundFinished: boolean) => void;
-  onAllRoundsComplete: () => void;
-  currentRoundIndex: number;
-  totalRounds: number;
+  onBubbleResult: (result: BubbleTapResult) => void;
+  onGameComplete: () => void;
 };
 
-export function BubblesScene({
-  difficulty,
-  onRoundComplete,
-  onAllRoundsComplete,
-  currentRoundIndex,
-  totalRounds,
-}: Props) {
-  const config = getConfigForDifficulty(difficulty);
-  const settings = DIFFICULTY_PRESETS[difficulty];
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
-  const [round, setRound] = useState<BubblesRound>(() => createRound(currentRoundIndex, config));
+export function BubblesScene({ onBubbleResult, onGameComplete }: Props) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
-  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 600 });
+  const [timeLeft, setTimeLeft] = useState(Math.floor(DEFAULT_CONFIG.durationMs / 1000));
+  const tappedRef = useRef<Set<string>>(new Set());
+  const spawnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const spawnIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Round değişince yeniden başlat
   useEffect(() => {
-    setRound(createRound(currentRoundIndex, config));
-    setBubbles([]);
-    setFeedback('idle');
-  }, [currentRoundIndex, difficulty]);
-
-  // Baloncuk üretimi
-  useEffect(() => {
-    spawnIntervalRef.current = setInterval(() => {
-      const newBubble = spawnBubble(round.target);
+    // Spawner
+    spawnTimerRef.current = setInterval(() => {
+      const newBubble = spawnBubble(DEFAULT_CONFIG);
       setBubbles((prev) => [...prev, newBubble]);
-    }, settings.spawnIntervalMs);
+    }, DEFAULT_CONFIG.spawnIntervalMs);
+
+    // Countdown
+    countdownRef.current = setInterval(() => {
+      setTimeLeft((t) => Math.max(0, t - 1));
+    }, 1000);
+
+    // Oyun sonu
+    endTimerRef.current = setTimeout(() => {
+      handleGameEnd();
+    }, DEFAULT_CONFIG.durationMs);
 
     return () => {
-      if (spawnIntervalRef.current) clearInterval(spawnIntervalRef.current);
+      if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      if (endTimerRef.current) clearTimeout(endTimerRef.current);
     };
-  }, [round.target, settings.spawnIntervalMs]);
+  }, []);
 
-  function onContainerLayout(e: LayoutChangeEvent) {
-    const { width, height } = e.nativeEvent.layout;
-    setContainerSize({ width, height });
-  }
-
-  function removeBubble(id: string) {
-    setBubbles((prev) => prev.filter((b) => b.id !== id));
+  function handleGameEnd() {
+    if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    // Ekranda kalan baloncukları omisyon/correct_reject olarak işle
+    setBubbles((current) => {
+      current.forEach((b) => {
+        if (!tappedRef.current.has(b.id)) {
+          if (b.isVowel) {
+            onBubbleResult({ type: 'omission', letter: b.letter });
+          } else {
+            onBubbleResult({ type: 'correct_reject', letter: b.letter });
+          }
+        }
+      });
+      return [];
+    });
+    onGameComplete();
   }
 
   function handleBubbleTap(bubble: Bubble) {
-    if (feedback !== 'idle') return;
-
-    const tapResult: BubbleTapResult = {
-      tappedLetter: bubble.letter,
-      isTarget: bubble.isTarget,
-      reactionTimeMs: Date.now() - bubble.spawnedAt,
-    };
-
-    removeBubble(bubble.id);
-
-    if (bubble.isTarget) {
-      setFeedback('correct');
-      const newPopped = round.poppedTargets + 1;
-      setRound((prev) => ({ ...prev, poppedTargets: newPopped }));
-
-      const roundComplete = newPopped >= round.totalTargetsNeeded;
-
-      setTimeout(() => {
-        setFeedback('idle');
-        onRoundComplete(tapResult, roundComplete);
-
-        if (roundComplete && currentRoundIndex + 1 >= totalRounds) {
-          onAllRoundsComplete();
-        }
-      }, 300);
+    if (tappedRef.current.has(bubble.id)) return;
+    tappedRef.current.add(bubble.id);
+    const reactionTimeMs = Date.now() - bubble.spawnedAt;
+    if (bubble.isVowel) {
+      onBubbleResult({ type: 'correct_hit', letter: bubble.letter, reactionTimeMs });
     } else {
-      setFeedback('wrong');
-      setTimeout(() => {
-        setFeedback('idle');
-        onRoundComplete(tapResult, false);
-      }, 500);
+      onBubbleResult({ type: 'commission', letter: bubble.letter, reactionTimeMs });
     }
+    setBubbles((prev) => prev.filter((b) => b.id !== bubble.id));
   }
+
+  function handleBubbleExpire(bubble: Bubble) {
+    if (tappedRef.current.has(bubble.id)) return;
+    tappedRef.current.add(bubble.id);
+    if (bubble.isVowel) {
+      onBubbleResult({ type: 'omission', letter: bubble.letter });
+    } else {
+      onBubbleResult({ type: 'correct_reject', letter: bubble.letter });
+    }
+    setBubbles((prev) => prev.filter((b) => b.id !== bubble.id));
+  }
+
+  const timeColor = timeLeft <= 10 ? '#ef4444' : '#ffffff';
 
   return (
     <View style={styles.container}>
-      <View style={styles.promptContainer}>
-        <Text style={styles.promptLabel}>{round.target.description}</Text>
-        <Text style={styles.progressText}>
-          Patlatılan: {round.poppedTargets} / {round.totalTargetsNeeded}
-        </Text>
+      <View style={styles.header}>
+        <Text style={styles.rule}>🔊 SADECE SESLİ harfli baloncukları patlat!</Text>
+        <Text style={[styles.timer, { color: timeColor }]}>{timeLeft}s</Text>
       </View>
 
-      <View style={styles.playArea} onLayout={onContainerLayout}>
+      <View style={styles.gameArea}>
         {bubbles.map((bubble) => (
-          <BubbleItem
+          <BubbleView
             key={bubble.id}
             bubble={bubble}
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
-            riseDurationMs={settings.riseDurationMs}
-            onPress={() => handleBubbleTap(bubble)}
-            onExpire={() => removeBubble(bubble.id)}
-            disabled={feedback !== 'idle'}
+            onTap={() => handleBubbleTap(bubble)}
+            onExpire={() => handleBubbleExpire(bubble)}
           />
         ))}
       </View>
-
-      {feedback === 'correct' && (
-        <View style={[styles.feedbackBadge, styles.feedbackCorrect]}>
-          <Text style={styles.feedbackText}>🎊 Patlattın!</Text>
-        </View>
-      )}
-      {feedback === 'wrong' && (
-        <View style={[styles.feedbackBadge, styles.feedbackWrong]}>
-          <Text style={styles.feedbackText}>O değil!</Text>
-        </View>
-      )}
     </View>
   );
 }
 
-type BubbleItemProps = {
-  bubble: Bubble;
-  containerWidth: number;
-  containerHeight: number;
-  riseDurationMs: number;
-  onPress: () => void;
-  onExpire: () => void;
-  disabled: boolean;
-};
-
-function BubbleItem({
-  bubble,
-  containerWidth,
-  containerHeight,
-  riseDurationMs,
-  onPress,
-  onExpire,
-  disabled,
-}: BubbleItemProps) {
-  const translateY = useSharedValue(0);
+function BubbleView({ bubble, onTap, onExpire }: { bubble: Bubble; onTap: () => void; onExpire: () => void }) {
+  const startX = useRef(Math.random() * (SCREEN_WIDTH - 100) + 25).current;
+  const y = useSharedValue(SCREEN_HEIGHT - 200);
+  const expiredRef = useRef(false);
 
   useEffect(() => {
-    // Aşağıdan yukarı çık
-    translateY.value = withTiming(
-      -(containerHeight + 100),
-      { duration: riseDurationMs, easing: Easing.linear },
+    y.value = withTiming(
+      -100,
+      { duration: DEFAULT_CONFIG.bubbleLifetimeMs, easing: Easing.linear },
       (finished) => {
-        if (finished) {
+        if (finished && !expiredRef.current) {
+          expiredRef.current = true;
           runOnJS(onExpire)();
         }
       }
@@ -185,101 +128,29 @@ function BubbleItem({
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: y.value }],
   }));
 
-  const left = Math.max(20, Math.min(containerWidth - 70, bubble.startX * containerWidth - 35));
-
   return (
-    <Animated.View
-      style={[
-        styles.bubbleContainer,
-        { left, bottom: -70 },
-        animatedStyle,
-      ]}>
-      <TouchableOpacity
-        style={[styles.bubble, bubble.isTarget && styles.bubbleTarget]}
-        onPress={onPress}
-        disabled={disabled}
-        activeOpacity={0.7}>
-        <Text style={styles.bubbleEmoji}>🫧</Text>
-        <Text style={styles.bubbleLetter}>{bubble.letter}</Text>
+    <Animated.View style={[styles.bubbleWrapper, { left: startX }, animatedStyle]}>
+      <TouchableOpacity onPress={onTap} activeOpacity={0.6}>
+        <View style={[styles.bubble, bubble.isVowel ? styles.bubbleVowel : styles.bubbleConsonant]}>
+          <Text style={styles.bubbleText}>{bubble.letter}</Text>
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a1929',
-  },
-  promptContainer: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 12,
-    zIndex: 10,
-  },
-  promptLabel: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-  },
-  progressText: {
-    fontSize: 16,
-    color: '#a0a0c0',
-  },
-  playArea: {
-    flex: 1,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  bubbleContainer: {
-    position: 'absolute',
-  },
-  bubble: {
-    width: 70,
-    height: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bubbleTarget: {
-    // Tüm baloncuklar görsel olarak aynı — oyuncu harfe bakacak
-  },
-  bubbleEmoji: {
-    position: 'absolute',
-    fontSize: 70,
-    opacity: 0.85,
-  },
-  bubbleLetter: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textShadowColor: '#000000',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  feedbackBadge: {
-    position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 30,
-    zIndex: 20,
-  },
-  feedbackCorrect: {
-    backgroundColor: '#22c55e',
-  },
-  feedbackWrong: {
-    backgroundColor: '#ef4444',
-  },
-  feedbackText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, alignItems: 'center', gap: 8 },
+  rule: { fontSize: 18, fontWeight: '700', color: '#ffffff', textAlign: 'center' },
+  timer: { fontSize: 36, fontWeight: 'bold' },
+  gameArea: { flex: 1, position: 'relative', overflow: 'hidden' },
+  bubbleWrapper: { position: 'absolute' },
+  bubble: { width: 84, height: 84, borderRadius: 42, justifyContent: 'center', alignItems: 'center', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  bubbleVowel: { backgroundColor: '#4630EB' },
+  bubbleConsonant: { backgroundColor: '#7a4a4a' },
+  bubbleText: { fontSize: 38, fontWeight: 'bold', color: '#ffffff' },
 });

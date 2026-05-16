@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { testSupabaseConnection } from '../services/supabase';
-import { testGeminiConnection } from '../services/gemini';
 
 type TestResult = {
   name: string;
@@ -13,10 +12,6 @@ type TestResult = {
 export default function DevTestScreen() {
   const [supabaseResult, setSupabaseResult] = useState<TestResult>({
     name: 'Supabase',
-    status: 'idle',
-  });
-  const [geminiResult, setGeminiResult] = useState<TestResult>({
-    name: 'Gemini Flash',
     status: 'idle',
   });
 
@@ -38,34 +33,15 @@ export default function DevTestScreen() {
     }
   }
 
-  async function runGeminiTest() {
-    setGeminiResult({ name: 'Gemini Flash', status: 'loading' });
-    const result = await testGeminiConnection();
-    if (result.ok) {
-      setGeminiResult({
-        name: 'Gemini Flash',
-        status: 'success',
-        message: result.response,
-      });
-    } else {
-      setGeminiResult({
-        name: 'Gemini Flash',
-        status: 'error',
-        message: result.error,
-      });
-    }
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>🔧 Geliştirme Test Ekranı</Text>
         <Text style={styles.subtitle}>
-          Sprint 0 — Bağlantı doğrulama. Bu ekran sadece geliştirme aşamasında kullanılır.
+          Bağlantı doğrulama. Bu ekran sadece geliştirme aşamasında kullanılır.
         </Text>
 
         <TestCard result={supabaseResult} onPress={runSupabaseTest} />
-        <TestCard result={geminiResult} onPress={runGeminiTest} />
       </ScrollView>
     </SafeAreaView>
   );

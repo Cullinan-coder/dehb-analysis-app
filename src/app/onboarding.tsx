@@ -1,165 +1,217 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
 import { createChild } from '../services/child';
 
 export default function OnboardingScreen() {
+  const setChild = useGameStore((s) => s.setChild);
+  const reset = useGameStore((s) => s.reset);
+
   const [childName, setChildName] = useState('');
-  const [childAge, setChildAge] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { setChild } = useGameStore();
+  const [age, setAge] = useState('');
+  const [parentName, setParentName] = useState('');
+  const [parentEmail, setParentEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleStart = async () => {
-    if (!childName || !childAge) return;
+  function isValidEmail(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  }
 
-    setLoading(true);
-    const child = await createChild(parseInt(childAge));
+  async function handleSubmit() {
+    const trimmedChildName = childName.trim();
+    const trimmedParentName = parentName.trim();
+    const trimmedEmail = parentEmail.trim();
+    const ageNum = parseInt(age, 10);
 
-    if (child) {
-      setChild(child.id, parseInt(childAge));
-      router.replace('/');
-    } else {
-      alert('Bağlantı sorunu, tekrar dene.');
+    if (!trimmedChildName) {
+      Alert.alert('Eksik bilgi', 'Lütfen çocuğun adını girin.');
+      return;
     }
-    setLoading(false);
-  };
+    if (isNaN(ageNum) || ageNum < 4 || ageNum > 18) {
+      Alert.alert('Geçersiz yaş', 'Lütfen 4 ile 18 arasında bir yaş girin.');
+      return;
+    }
+    if (!trimmedParentName) {
+      Alert.alert('Eksik bilgi', 'Lütfen veli adını girin.');
+      return;
+    }
+    if (!isValidEmail(trimmedEmail)) {
+      Alert.alert('Geçersiz e-posta', 'Lütfen geçerli bir e-posta adresi girin.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    reset();
+    const child = await createChild({
+      childName: trimmedChildName,
+      age: ageNum,
+      parentName: trimmedParentName,
+      parentEmail: trimmedEmail,
+    });
+
+    setSubmitting(false);
+
+    if (!child) {
+      Alert.alert('Hata', 'Kayıt oluşturulamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.');
+      return;
+    }
+
+    setChild(child.id, child.age);
+    router.replace('/');
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.emoji}>👋</Text>
-      <Text style={styles.title}>Merhaba!</Text>
-      <Text style={styles.subtitle}>Seni tanıyalım</Text>
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.flex}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.header}>
+            <Text style={styles.emoji}>🌟</Text>
+            <Text style={styles.title}>Hoş Geldiniz!</Text>
+            <Text style={styles.subtitle}>
+              Veli denetiminde bir DEHB analiz oturumu başlatmak için lütfen bilgileri doldurun.
+            </Text>
+          </View>
 
-      <View style={styles.form}>
-        <Text style={styles.label}>Adın ne?</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Adını yaz..."
-          placeholderTextColor="#666"
-          value={childName}
-          onChangeText={setChildName}
-        />
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Çocuk Bilgileri</Text>
 
-        <Text style={styles.label}>Kaç yaşındasın?</Text>
-        <View style={styles.ageRow}>
-          {[6, 7, 8, 9, 10, 11, 12].map((age) => (
-            <TouchableOpacity
-              key={age}
-              style={[
-                styles.ageButton,
-                childAge === String(age) && styles.ageButtonSelected,
-              ]}
-              onPress={() => setChildAge(String(age))}
-            >
-              <Text style={[
-                styles.ageText,
-                childAge === String(age) && styles.ageTextSelected,
-              ]}>
-                {age}
+            <View style={styles.field}>
+              <Text style={styles.label}>Çocuğun Adı</Text>
+              <TextInput
+                style={styles.input}
+                value={childName}
+                onChangeText={setChildName}
+                placeholder="Örn: Ahmet"
+                placeholderTextColor="#6b7280"
+                autoCapitalize="words"
+                editable={!submitting}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Yaşı</Text>
+              <TextInput
+                style={styles.input}
+                value={age}
+                onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
+                placeholder="4-18 arası"
+                placeholderTextColor="#6b7280"
+                keyboardType="number-pad"
+                maxLength={2}
+                editable={!submitting}
+              />
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Veli Bilgileri</Text>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Veli Adı</Text>
+              <TextInput
+                style={styles.input}
+                value={parentName}
+                onChangeText={setParentName}
+                placeholder="Örn: Ayşe Yılmaz"
+                placeholderTextColor="#6b7280"
+                autoCapitalize="words"
+                editable={!submitting}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Veli E-posta</Text>
+              <TextInput
+                style={styles.input}
+                value={parentEmail}
+                onChangeText={setParentEmail}
+                placeholder="rapor@email.com"
+                placeholderTextColor="#6b7280"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!submitting}
+              />
+              <Text style={styles.hint}>
+                Rapor bu e-posta adresine gönderilecektir. Şifre veya hesap oluşturulmaz.
               </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+            </View>
+          </View>
 
-        <TouchableOpacity
-          style={[styles.startButton, (!childName || !childAge) && styles.startButtonDisabled]}
-          onPress={handleStart}
-          disabled={!childName || !childAge || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.startButtonText}>Maceraya Başla! 🚀</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
+          <TouchableOpacity
+            style={[styles.button, submitting && styles.buttonDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}>
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Simülasyonu Başlat</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  emoji: {
-    fontSize: 80,
+  container: { flex: 1, backgroundColor: '#1a1a2e' },
+  flex: { flex: 1 },
+  scroll: { padding: 24, paddingBottom: 48 },
+  header: { alignItems: 'center', marginBottom: 32, marginTop: 16 },
+  emoji: { fontSize: 72, marginBottom: 12 },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', marginBottom: 8 },
+  subtitle: { fontSize: 15, color: '#a0a0c0', textAlign: 'center', lineHeight: 22, paddingHorizontal: 8 },
+  section: {
+    backgroundColor: '#16213e',
+    borderRadius: 20,
+    padding: 20,
     marginBottom: 16,
+    gap: 16,
   },
-  title: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4630EB',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  subtitle: {
-    fontSize: 20,
-    color: '#a0a0c0',
-    marginBottom: 48,
-  },
-  form: {
-    width: '100%',
-    maxWidth: 400,
-  },
-  label: {
-    fontSize: 18,
-    color: '#a0a0c0',
-    marginBottom: 12,
-  },
+  field: { gap: 6 },
+  label: { fontSize: 14, fontWeight: '600', color: '#ffffff' },
   input: {
-    backgroundColor: '#16213e',
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 20,
+    backgroundColor: '#0f1626',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
     color: '#ffffff',
-    marginBottom: 24,
-    borderWidth: 2,
-    borderColor: '#4630EB',
-  },
-  ageRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 48,
-  },
-  ageButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#16213e',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#2d2d44',
   },
-  ageButtonSelected: {
+  hint: { fontSize: 12, color: '#a0a0c0', marginTop: 4, lineHeight: 16 },
+  button: {
     backgroundColor: '#4630EB',
-    borderColor: '#4630EB',
-  },
-  ageText: {
-    fontSize: 20,
-    color: '#a0a0c0',
-    fontWeight: 'bold',
-  },
-  ageTextSelected: {
-    color: '#ffffff',
-  },
-  startButton: {
-    backgroundColor: '#4630EB',
-    borderRadius: 30,
-    padding: 20,
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: 'center',
+    marginTop: 8,
   },
-  startButtonDisabled: {
-    backgroundColor: '#2d2d44',
-  },
-  startButtonText: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: '#ffffff', fontSize: 17, fontWeight: '700' },
 });

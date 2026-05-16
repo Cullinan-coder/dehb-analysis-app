@@ -1,95 +1,155 @@
-import { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../stores/gameStore';
+import { getChildScores } from '../services/childScores';
+
+type GameSlot = 'game1' | 'game2' | 'game3' | 'game4' | 'game5';
 
 type GameCard = {
   id: string;
+  slot: GameSlot;
   emoji: string;
   title: string;
   description: string;
-  route: '/play/letter-hunt' | '/play/frog-jump' | '/play/detective' | '/play/bubbles' | '/play/robot-factory';
-  available: boolean;
+  route: '/play/letter-hunt' | '/play/bubbles' | '/play/robot-factory' | '/play/rhythm' | '/play/flexibility';
 };
 
 const GAMES: GameCard[] = [
-  {
-    id: 'letter-hunt',
-    emoji: '🔤',
-    title: 'Harf Avı',
-    description: 'Doğru harfi bul!',
-    route: '/play/letter-hunt',
-    available: true,
-  },
-  {
-    id: 'frog-jump',
-    emoji: '🐸',
-    title: 'Kurbağa Zıp Zıp',
-    description: 'Sayıları sırayla bul!',
-    route: '/play/frog-jump',
-    available: true,
-  },
-  {
-    id: 'detective',
-    emoji: '🔦',
-    title: 'Dedektif Feneri',
-    description: 'Karanlıkta harfleri ara!',
-    route: '/play/detective',
-    available: true,
-  },
-  {
-    id: 'bubbles',
-    emoji: '🫧',
-    title: 'Harf Baloncukları',
-    description: 'Doğru baloncuğu patlat!',
-    route: '/play/bubbles',
-    available: true,
-  },
-  {
-    id: 'robot-factory',
-    emoji: '🤖',
-    title: 'Robot Fabrikası',
-    description: 'Kelimeleri birleştir!',
-    route: '/play/robot-factory',
-    available: true,
-  },
+  { id: 'letter-hunt',   slot: 'game1', emoji: '🔤', title: 'Harf Avı',           description: 'Doğru harfi bul!',          route: '/play/letter-hunt' },
+  { id: 'bubbles',       slot: 'game2', emoji: '🫧', title: 'Harf Baloncukları',  description: 'Sadece sesli harfleri patlat!', route: '/play/bubbles' },
+  { id: 'robot-factory', slot: 'game3', emoji: '🤖', title: 'Hece Birleştirme',   description: 'Kelimeyi hecelerle yap!',   route: '/play/robot-factory' },
+  { id: 'rhythm',        slot: 'game4', emoji: '🥁', title: 'Ritim Ustası',       description: 'Ritmi yakala!',              route: '/play/rhythm' },
+  { id: 'flexibility',   slot: 'game5', emoji: '🔄', title: 'Kural Değiştirici',  description: 'Değişen kurallara uy!',     route: '/play/flexibility' },
 ];
 
 export default function HomeScreen() {
   const childId = useGameStore((s) => s.childId);
-  const childAge = useGameStore((s) => s.childAge);
+  const completedGames = useGameStore((s) => s.completedGames);
+  const setCompletedGames = useGameStore((s) => s.setCompletedGames);
+  const setScoreRowId = useGameStore((s) => s.setScoreRowId);
+
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!childId) {
       router.replace('/onboarding');
+      return;
     }
+
+    // Supabase'den ilerleme oku
+    (async () => {
+      setLoading(true);
+      const row = await getChildScores(childId);
+      if (row) {
+        setScoreRowId(row.id);
+        setCompletedGames({
+          game1: row.game1 !== null,
+          game2: row.game2 !== null,
+          game3: row.game3 !== null,
+          game4: row.game4 !== null,
+          game5: row.game5 !== null,
+        });
+      } else {
+        // Henüz hiç oyun oynanmamış
+        setScoreRowId(null);
+        setCompletedGames({
+          game1: false, game2: false, game3: false, game4: false, game5: false,
+        });
+      }
+      setLoading(false);
+    })();
   }, [childId]);
+
+  // Sıradaki aktif oyun: ilk false olan slot
+  const nextActiveSlot: GameSlot | null = (() => {
+    const slots: GameSlot[] = ['game1', 'game2', 'game3', 'game4', 'game5'];
+    for (const s of slots) {
+      if (!completedGames[s]) return s;
+    }
+    return null; // hepsi tamamlandı
+  })();
+
+  const allCompleted = nextActiveSlot === null;
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color="#4630EB" />
+          <Text style={styles.loaderText}>İlerleme yükleniyor...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (allCompleted) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.header}>
+            <Text style={styles.completedEmoji}>🏆</Text>
+            <Text style={styles.greeting}>Tebrikler!</Text>
+            <Text style={styles.subtitle}>Tüm oyunları tamamladın. Simülasyon sona erdi!</Text>
+          </View>
+          <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
+            <Text style={styles.devLinkText}>🔧 Geliştirme Test Ekranı</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <Text style={styles.greeting}>Merhaba! 👋</Text>
-          <Text style={styles.subtitle}>Hangi oyunu oynamak istersin?</Text>
+          <Text style={styles.subtitle}>Sıradaki oyununu oyna!</Text>
         </View>
 
         <View style={styles.grid}>
-          {GAMES.map((game) => (
-            <TouchableOpacity
-              key={game.id}
-              style={[styles.card, !game.available && styles.cardDisabled]}
-              onPress={() => game.available && router.push(game.route)}
-              activeOpacity={game.available ? 0.7 : 1}>
-              <Text style={styles.cardEmoji}>{game.emoji}</Text>
-              <Text style={styles.cardTitle}>{game.title}</Text>
-              <Text style={styles.cardDescription}>{game.description}</Text>
-              {!game.available && (
-                <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Yakında</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
+          {GAMES.map((game) => {
+            const isCompleted = completedGames[game.slot];
+            const isActive = nextActiveSlot === game.slot;
+            const isLocked = !isCompleted && !isActive;
+
+            const onPress = () => {
+              if (isActive) router.push(game.route);
+            };
+
+            return (
+              <TouchableOpacity
+                key={game.id}
+                style={[
+                  styles.card,
+                  isLocked && styles.cardLocked,
+                  isCompleted && styles.cardCompleted,
+                ]}
+                onPress={onPress}
+                disabled={!isActive}
+                activeOpacity={isActive ? 0.7 : 1}>
+                <Text style={styles.cardEmoji}>{game.emoji}</Text>
+                <Text style={styles.cardTitle}>{game.title}</Text>
+                <Text style={styles.cardDescription}>{game.description}</Text>
+                {isCompleted && (
+                  <View style={styles.completedBadge}>
+                    <Text style={styles.completedBadgeText}>✓ Tamamlandı</Text>
+                  </View>
+                )}
+                {isLocked && (
+                  <View style={styles.lockedBadge}>
+                    <Text style={styles.lockedBadgeText}>🔒 Kilitli</Text>
+                  </View>
+                )}
+                {isActive && (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>▶ Sırada</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
@@ -103,9 +163,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
   scroll: { padding: 24, paddingBottom: 48 },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  loaderText: { color: '#a0a0c0', fontSize: 16 },
   header: { alignItems: 'center', marginBottom: 32, marginTop: 16 },
+  completedEmoji: { fontSize: 96, marginBottom: 16 },
   greeting: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', marginBottom: 8 },
-  subtitle: { fontSize: 18, color: '#a0a0c0' },
+  subtitle: { fontSize: 18, color: '#a0a0c0', textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, justifyContent: 'center' },
   card: {
     backgroundColor: '#16213e',
@@ -120,20 +183,29 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     position: 'relative',
   },
-  cardDisabled: { opacity: 0.5 },
+  cardLocked: { opacity: 0.4 },
+  cardCompleted: { opacity: 0.6, borderWidth: 2, borderColor: '#22c55e' },
   cardEmoji: { fontSize: 64, marginBottom: 12 },
   cardTitle: { fontSize: 20, fontWeight: 'bold', color: '#ffffff', marginBottom: 6, textAlign: 'center' },
   cardDescription: { fontSize: 14, color: '#a0a0c0', textAlign: 'center' },
-  comingSoonBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#4630EB',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  completedBadge: {
+    position: 'absolute', top: 12, right: 12,
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
   },
-  comingSoonText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
+  completedBadgeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
+  lockedBadge: {
+    position: 'absolute', top: 12, right: 12,
+    backgroundColor: '#2d2d44',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+  },
+  lockedBadgeText: { color: '#a0a0c0', fontSize: 11, fontWeight: 'bold' },
+  activeBadge: {
+    position: 'absolute', top: 12, right: 12,
+    backgroundColor: '#4630EB',
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+  },
+  activeBadgeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
   devLink: { marginTop: 32, alignSelf: 'center', paddingVertical: 8 },
   devLinkText: { color: '#a0a0c0', fontSize: 14, textDecorationLine: 'underline' },
 });

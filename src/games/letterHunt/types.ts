@@ -10,22 +10,16 @@ export type LetterHuntRound = {
 };
 
 export type LetterTapResult = {
-  tappedLetter: string;
+  tappedLetter: string | null; // null = timeout (omisyon)
   targetLetter: string;
   correct: boolean;
   reactionTimeMs: number;
+  isTimeout: boolean;
 };
-
-export type LetterHuntDifficulty = 'easy' | 'medium' | 'hard';
 
 export type LetterHuntConfig = {
   totalRounds: number;
   choicesPerRound: number;
+  roundTimeoutMs: number;
   alphabet: string[];
-  difficulty: LetterHuntDifficulty;
-};
-
-export type DifficultySettings = {
-  choicesPerRound: number;
-  fontSize: number;
 };

@@ -1,409 +1,163 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSequence,
-  withTiming,
-  withSpring,
-} from 'react-native-reanimated';
-
-import {
-  generateRound,
-  tryPlaceSyllable,
-  getConfigForDifficulty,
-} from './logic';
-import {
-  RobotRound,
-  RobotPlaceResult,
-  RobotDifficulty,
-  SyllableItem,
-} from './types';
+import { generateRound, pickRoundWords, DEFAULT_CONFIG } from './logic';
+import { RobotFactoryRound, WordResult } from './types';
+import { WordEntry } from './wordList';
 
 type Props = {
-  difficulty: RobotDifficulty;
-  onRoundComplete: (result: RobotPlaceResult, roundFinished: boolean) => void;
+  onWordComplete: (result: WordResult) => void;
   onAllRoundsComplete: () => void;
   currentRoundIndex: number;
-  totalRounds: number;
 };
 
-export function RobotFactoryScene({
-  difficulty,
-  onRoundComplete,
-  onAllRoundsComplete,
-  currentRoundIndex,
-  totalRounds,
-}: Props) {
-  const config = getConfigForDifficulty(difficulty);
-
-  const [round, setRound] = useState<RobotRound>(() => generateRound(config));
-  const [selectedSyllableId, setSelectedSyllableId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const [wrongSlotHint, setWrongSlotHint] = useState<number | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
+export function RobotFactoryScene({ onWordComplete, onAllRoundsComplete, currentRoundIndex }: Props) {
+  const wordsRef = useRef<WordEntry[]>(pickRoundWords(DEFAULT_CONFIG.totalRounds));
+  const [round, setRound] = useState<RobotFactoryRound>(() => generateRound(wordsRef.current[0], DEFAULT_CONFIG));
+  const [builtSyllables, setBuiltSyllables] = useState<string[]>([]);
+  const [wrongTaps, setWrongTaps] = useState(0);
+  const [feedback, setFeedback] = useState<'idle' | 'correct' | 'wrong' | 'timeout' | 'complete'>('idle');
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrongFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setRound(generateRound(config));
-    setSelectedSyllableId(null);
+    const entry = wordsRef.current[currentRoundIndex];
+    if (!entry) return;
+    setRound(generateRound(entry, DEFAULT_CONFIG));
+    setBuiltSyllables([]);
+    setWrongTaps(0);
     setFeedback('idle');
-    setWrongSlotHint(null);
-    setShowCelebration(false);
-  }, [currentRoundIndex, difficulty]);
-
-  function handleSyllablePress(syllable: SyllableItem) {
-    if (feedback !== 'idle' || syllable.placed) return;
-    // Toggle: aynı heceye tekrar basarsa seçimi iptal
-    if (selectedSyllableId === syllable.id) {
-      setSelectedSyllableId(null);
-    } else {
-      setSelectedSyllableId(syllable.id);
-    }
-  }
-
-  function handleSlotPress(slotIndex: number) {
-    if (feedback !== 'idle') return;
-    if (!selectedSyllableId) {
-      // Hece seçmeden slot'a basıldı — ipucu olarak slotu parlat
-      return;
-    }
-    if (round.slots[slotIndex].filledWith) return; // dolu slot
-
-    const selectedSyl = round.pool.find((s) => s.id === selectedSyllableId);
-    if (!selectedSyl) return;
-
-    const result = tryPlaceSyllable(round, selectedSyllableId, slotIndex);
-
-    const placeResult: RobotPlaceResult = {
-      syllableId: selectedSyllableId,
-      syllable: selectedSyl.syllable,
-      slotIndex,
-      correct: result.correct,
-      reactionTimeMs: result.reactionTimeMs,
+    timeoutRef.current = setTimeout(() => handleTimeout(), DEFAULT_CONFIG.roundTimeoutMs);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (advanceRef.current) clearTimeout(advanceRef.current);
+      if (wrongFlashRef.current) clearTimeout(wrongFlashRef.current);
     };
+  }, [currentRoundIndex]);
 
-    if (result.correct) {
-      setFeedback('correct');
-      setRound(result.newRound);
-      setSelectedSyllableId(null);
+  function advance(result: WordResult, delayMs: number) {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    advanceRef.current = setTimeout(() => {
+      onWordComplete(result);
+      if (currentRoundIndex + 1 >= DEFAULT_CONFIG.totalRounds) {
+        onAllRoundsComplete();
+      }
+    }, delayMs);
+  }
 
-      setTimeout(() => {
-        setFeedback('idle');
-        onRoundComplete(placeResult, result.roundComplete);
+  function handleSyllableTap(syllable: string) {
+    if (feedback === 'complete' || feedback === 'timeout') return;
 
-        if (result.roundComplete) {
-          setShowCelebration(true);
-          setTimeout(() => {
-            setShowCelebration(false);
-            if (currentRoundIndex + 1 >= totalRounds) {
-              onAllRoundsComplete();
-            }
-          }, 1500);
-        }
-      }, 400);
+    const nextIndex = builtSyllables.length;
+    const expected = round.correctSyllables[nextIndex];
+
+    if (syllable === expected) {
+      const newBuilt = [...builtSyllables, syllable];
+      setBuiltSyllables(newBuilt);
+
+      if (newBuilt.length === round.correctSyllables.length) {
+        setFeedback('complete');
+        advance(
+          {
+            word: round.word,
+            completed: true,
+            wrongTaps,
+            isTimeout: false,
+            reactionTimeMs: Date.now() - round.startedAt,
+          },
+          400
+        );
+      }
     } else {
+      setWrongTaps((w) => w + 1);
       setFeedback('wrong');
-      setWrongSlotHint(slotIndex);
-      setSelectedSyllableId(null);
-
-      setTimeout(() => {
-        setFeedback('idle');
-        setWrongSlotHint(null);
-        onRoundComplete(placeResult, false);
-      }, 800);
+      if (wrongFlashRef.current) clearTimeout(wrongFlashRef.current);
+      wrongFlashRef.current = setTimeout(() => setFeedback('idle'), 400);
     }
   }
+
+  function handleTimeout() {
+    if (feedback === 'complete') return;
+    setFeedback('timeout');
+    advance(
+      {
+        word: round.word,
+        completed: builtSyllables.length === round.correctSyllables.length,
+        wrongTaps,
+        isTimeout: true,
+        reactionTimeMs: DEFAULT_CONFIG.roundTimeoutMs,
+      },
+      800
+    );
+  }
+
+  const flashColor =
+    feedback === 'wrong' ? '#3b0a0a' :
+    feedback === 'complete' ? '#0a3b1f' :
+    feedback === 'timeout' ? '#1f1f2e' :
+    '#1a1a2e';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.promptContainer}>
-        <Text style={styles.promptLabel}>Robotu birleştir:</Text>
-        <Text style={styles.targetWord}>{round.targetWord}</Text>
+    <View style={[styles.container, { backgroundColor: flashColor }]}>
+      <View style={styles.header}>
+        <Text style={styles.targetLabel}>Yap:</Text>
+        <Text style={styles.targetWord}>{round.word}</Text>
       </View>
 
-      {/* Robot Gövdesi + Slotlar */}
-      <View style={styles.robotArea}>
-        <Text style={styles.robotEmoji}>{showCelebration ? '🤖✨' : '🤖'}</Text>
-
-        <View style={styles.slotsContainer}>
-          {round.slots.map((slot, idx) => (
-            <SlotBox
-              key={idx}
-              slot={slot}
-              isWrongHint={wrongSlotHint === idx}
-              isClickable={selectedSyllableId !== null && !slot.filledWith}
-              onPress={() => handleSlotPress(idx)}
-            />
-          ))}
-        </View>
+      <View style={styles.buildArea}>
+        {round.correctSyllables.map((_, idx) => {
+          const filled = builtSyllables[idx];
+          return (
+            <View key={idx} style={[styles.slot, filled ? styles.slotFilled : styles.slotEmpty]}>
+              <Text style={styles.slotText}>{filled ?? '_'}</Text>
+            </View>
+          );
+        })}
       </View>
 
-      {/* Hece Havuzu */}
-      <View style={styles.poolContainer}>
-        <Text style={styles.poolLabel}>Heceler:</Text>
-        <View style={styles.poolGrid}>
-          {round.pool.map((syl) => (
-            <SyllableButton
-              key={syl.id}
-              syllable={syl}
-              selected={selectedSyllableId === syl.id}
-              onPress={() => handleSyllablePress(syl)}
-              disabled={feedback !== 'idle'}
-            />
-          ))}
-        </View>
+      <View style={styles.choicesGrid}>
+        {round.choices.map((syllable, idx) => {
+          const isUsed = builtSyllables.filter((s) => s === syllable).length >=
+                         round.correctSyllables.filter((s) => s === syllable).length;
+          return (
+            <TouchableOpacity
+              key={`${currentRoundIndex}-${idx}`}
+              style={[styles.choiceButton, isUsed && styles.choiceButtonUsed]}
+              onPress={() => handleSyllableTap(syllable)}
+              disabled={isUsed || feedback === 'complete' || feedback === 'timeout'}
+              activeOpacity={0.7}>
+              <Text style={styles.choiceText}>{syllable}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {feedback === 'correct' && !showCelebration && (
-        <View style={[styles.feedbackBadge, styles.feedbackCorrect]}>
-          <Text style={styles.feedbackText}>Vrrrt! ⚙️</Text>
-        </View>
+      {feedback === 'complete' && (
+        <View style={[styles.badge, styles.badgeCorrect]}><Text style={styles.badgeText}>✓ Süper!</Text></View>
       )}
-      {feedback === 'wrong' && (
-        <View style={[styles.feedbackBadge, styles.feedbackWrong]}>
-          <Text style={styles.feedbackText}>Tekrar dene! 💡</Text>
-        </View>
-      )}
-      {showCelebration && (
-        <View style={[styles.feedbackBadge, styles.celebrationBadge]}>
-          <Text style={styles.celebrationText}>🎉 {round.targetWord}! 🎉</Text>
-        </View>
+      {feedback === 'timeout' && (
+        <View style={[styles.badge, styles.badgeTimeout]}><Text style={styles.badgeText}>⏰ Süre doldu</Text></View>
       )}
     </View>
   );
 }
 
-type SyllableButtonProps = {
-  syllable: SyllableItem;
-  selected: boolean;
-  onPress: () => void;
-  disabled: boolean;
-};
-
-function SyllableButton({ syllable, selected, onPress, disabled }: SyllableButtonProps) {
-  const scale = useSharedValue(1);
-
-  useEffect(() => {
-    if (selected) {
-      scale.value = withSpring(1.15, { damping: 10 });
-    } else {
-      scale.value = withTiming(1, { duration: 200 });
-    }
-  }, [selected]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  if (syllable.placed) {
-    return (
-      <View style={[styles.syllableButton, styles.syllablePlaced]}>
-        <Text style={styles.syllablePlacedText}>{syllable.syllable}</Text>
-      </View>
-    );
-  }
-
-  return (
-    <Animated.View style={animatedStyle}>
-      <TouchableOpacity
-        style={[
-          styles.syllableButton,
-          selected && styles.syllableSelected,
-        ]}
-        onPress={onPress}
-        disabled={disabled}
-        activeOpacity={0.7}>
-        <Text style={styles.syllableText}>{syllable.syllable}</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
-type SlotProps = {
-  slot: { index: number; expectedSyllable: string; filledWith: string | null };
-  isWrongHint: boolean;
-  isClickable: boolean;
-  onPress: () => void;
-};
-
-function SlotBox({ slot, isWrongHint, isClickable, onPress }: SlotProps) {
-  const glow = useSharedValue(0);
-
-  useEffect(() => {
-    if (isWrongHint) {
-      glow.value = withSequence(
-        withTiming(1, { duration: 200 }),
-        withTiming(0, { duration: 200 }),
-        withTiming(1, { duration: 200 }),
-        withTiming(0, { duration: 200 })
-      );
-    }
-  }, [isWrongHint]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    shadowOpacity: 0.3 + glow.value * 0.6,
-    shadowRadius: 8 + glow.value * 12,
-  }));
-
-  return (
-    <Animated.View style={[
-      styles.slot,
-      slot.filledWith && styles.slotFilled,
-      isClickable && !slot.filledWith && styles.slotClickable,
-      animatedStyle,
-    ]}>
-      <TouchableOpacity
-        style={styles.slotTouch}
-        onPress={onPress}
-        disabled={!isClickable || !!slot.filledWith}
-        activeOpacity={0.7}>
-        <Text style={styles.slotText}>
-          {slot.filledWith ?? '?'}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1a1a2e',
-    paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  promptContainer: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  promptLabel: {
-    fontSize: 18,
-    color: '#a0a0c0',
-    marginBottom: 4,
-  },
-  targetWord: {
-    fontSize: 56,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: 4,
-    textShadowColor: '#4630EB',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 24,
-  },
-  robotArea: {
-    alignItems: 'center',
-  },
-  robotEmoji: {
-    fontSize: 96,
-    marginBottom: 16,
-  },
-  slotsContainer: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  slot: {
-    width: 100,
-    height: 100,
-    borderRadius: 16,
-    backgroundColor: '#16213e',
-    borderWidth: 3,
-    borderColor: '#4630EB',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#facc15',
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
-  slotFilled: {
-    backgroundColor: '#22c55e',
-    borderStyle: 'solid',
-    borderColor: '#22c55e',
-  },
-  slotClickable: {
-    borderColor: '#facc15',
-  },
-  slotTouch: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  slotText: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  poolContainer: {
-    width: '100%',
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  poolLabel: {
-    fontSize: 16,
-    color: '#a0a0c0',
-    marginBottom: 12,
-  },
-  poolGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'center',
-    maxWidth: 600,
-  },
-  syllableButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: '#4630EB',
-    borderRadius: 12,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  syllableSelected: {
-    backgroundColor: '#facc15',
-  },
-  syllablePlaced: {
-    backgroundColor: '#2d2d44',
-    opacity: 0.4,
-  },
-  syllableText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  syllablePlacedText: {
-    fontSize: 24,
-    color: '#666',
-    textDecorationLine: 'line-through',
-  },
-  feedbackBadge: {
-    position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 30,
-  },
-  feedbackCorrect: {
-    backgroundColor: '#22c55e',
-  },
-  feedbackWrong: {
-    backgroundColor: '#facc15',
-  },
-  celebrationBadge: {
-    backgroundColor: '#facc15',
-    paddingHorizontal: 48,
-    paddingVertical: 20,
-  },
-  feedbackText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  celebrationText: {
-    color: '#000000',
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, alignItems: 'center', paddingHorizontal: 24, paddingTop: 32 },
+  header: { alignItems: 'center', marginBottom: 32 },
+  targetLabel: { fontSize: 18, color: '#a0a0c0', marginBottom: 8 },
+  targetWord: { fontSize: 64, fontWeight: 'bold', color: '#ffffff', letterSpacing: 4 },
+  buildArea: { flexDirection: 'row', gap: 12, marginBottom: 48 },
+  slot: { minWidth: 80, height: 80, borderRadius: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, borderWidth: 2 },
+  slotEmpty: { borderColor: '#4630EB', borderStyle: 'dashed', backgroundColor: 'transparent' },
+  slotFilled: { borderColor: '#22c55e', backgroundColor: '#0f2818' },
+  slotText: { fontSize: 32, fontWeight: 'bold', color: '#ffffff' },
+  choicesGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14, maxWidth: 600 },
+  choiceButton: { paddingHorizontal: 22, paddingVertical: 18, backgroundColor: '#4630EB', borderRadius: 16, minWidth: 90, alignItems: 'center' },
+  choiceButtonUsed: { backgroundColor: '#2d2d44', opacity: 0.4 },
+  choiceText: { fontSize: 28, fontWeight: 'bold', color: '#ffffff' },
+  badge: { position: 'absolute', bottom: 60, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 30 },
+  badgeCorrect: { backgroundColor: '#22c55e' },
+  badgeTimeout: { backgroundColor: '#6b7280' },
+  badgeText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
 });

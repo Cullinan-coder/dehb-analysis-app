@@ -1,178 +1,83 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useGameStore } from '../../stores/gameStore';
-import { usePreExit } from '../../hooks/usePreExit';
 import { RobotFactoryScene } from '../../games/robotFactory/RobotFactoryScene';
-import { RobotPlaceResult, RobotDifficulty } from '../../games/robotFactory/types';
-import { getDifficultyForAge } from '../../games/robotFactory/logic';
-import {
-  createSession,
-  endSession as endSessionDB,
-  saveBehavioralEvent,
-} from '../../services/session';
+import { WordResult } from '../../games/robotFactory/types';
+import { calculatePerformance, DEFAULT_CONFIG } from '../../games/robotFactory/logic';
 import { upsertGameScore } from '../../services/childScores';
-import { formatDuration } from '../../utils/formatDuration';
 
-const ROBOT_TOTAL_ROUNDS = 5;
+type Phase = 'intro' | 'playing' | 'complete';
 
 export default function RobotFactoryScreen() {
-  const {
-    childId,
-    childAge,
-    sessionStarted,
-    focusScore,
-    completedTasks,
-    breakCount,
-    startSession,
-    endSession,
-    incrementBreak,
-    completeTask,
-    adaptiveReason,
-    showBreakModal,
-    setShowBreakModal,
-    clearAdaptiveDecision,
-    scoreRowId,
-    setScoreRowId,
-  } = useGameStore();
-
+  const { childId, childAge, scoreRowId, setScoreRowId, markGameCompleted } = useGameStore();
+  const [phase, setPhase] = useState<Phase>('intro');
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
-  const [showCompletionScreen, setShowCompletionScreen] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [dbSessionId, setDbSessionId] = useState<string | null>(null);
-  const [sessionStartTime, setSessionStartTime] = useState<number>(Date.now());
-  const [lastDurationMs, setLastDurationMs] = useState<number>(0);
-
-  const [difficulty, setDifficulty] = useState<RobotDifficulty>(() =>
-    getDifficultyForAge(childAge ?? 8)
-  );
+  const [completedCount, setCompletedCount] = useState(0);
 
   useEffect(() => {
-    if (!childId) {
-      router.replace('/onboarding');
-    }
+    if (!childId) router.replace('/onboarding');
   }, [childId]);
 
-  const { recordTouch, recordError } = usePreExit(
-    childAge ?? 8,
-    sessionStartTime
-  );
-
-  async function handleStartSession() {
-    const sessionId = Math.random().toString(36).substring(7);
-    startSession(sessionId);
+  function handleStart() {
     setCurrentRoundIndex(0);
-    setCorrectCount(0);
-    setShowCompletionScreen(false);
-    setSessionStartTime(Date.now());
-    clearAdaptiveDecision();
-    setShowBreakModal(false);
-    setDifficulty(getDifficultyForAge(childAge ?? 8));
-    recordTouch();
-
-    if (childId) {
-      const dbSession = await createSession(childId);
-      if (dbSession) {
-        setDbSessionId(dbSession.id);
-        console.log('[Robot Session] Başlatıldı:', dbSession.id);
-      }
-    }
+    setCompletedCount(0);
+    setPhase('playing');
   }
 
-  async function handleRoundComplete(result: RobotPlaceResult, roundFinished: boolean) {
-    recordTouch();
-    if (result.correct) {
-      setCorrectCount((c) => c + 1);
-    } else {
-      recordError();
-    }
-
-    if (dbSessionId) {
-      await saveBehavioralEvent(dbSessionId, 'robot_place', {
-        syllable: result.syllable,
-        slot_index: result.slotIndex,
-        correct: result.correct,
-        reaction_time_ms: result.reactionTimeMs,
-        round_index: currentRoundIndex,
-      });
-    }
-
-    if (roundFinished) {
-      completeTask();
-      setCurrentRoundIndex((idx) => idx + 1);
-    }
+  function handleWordComplete(result: WordResult) {
+    if (result.completed) setCompletedCount((c) => c + 1);
+    setCurrentRoundIndex((i) => i + 1);
   }
 
   async function handleAllRoundsComplete() {
-    const durationMs = Date.now() - sessionStartTime;
-    setLastDurationMs(durationMs);
-    setShowCompletionScreen(true);
-    if (dbSessionId) {
-      await endSessionDB(dbSessionId, focusScore, durationMs);
-      setDbSessionId(null);
-    }
-
-    // Write weighted score to child_scores
+    setPhase('complete');
     if (childId && childAge !== null) {
+      const performance = calculatePerformance(completedCount, DEFAULT_CONFIG.totalRounds);
       const result = await upsertGameScore({
-        scoreRowId,
-        childId,
-        age: childAge,
+        scoreRowId, childId, age: childAge,
         gameRoute: 'robot-factory',
-        correctCount,
+        performance,
       });
-      if (result.scoreRowId) {
-        setScoreRowId(result.scoreRowId);
-      }
+      if (result.scoreRowId) setScoreRowId(result.scoreRowId);
+      markGameCompleted('game3');
     }
   }
 
-  async function handleBreak() {
-    incrementBreak();
-    const durationMs = Date.now() - sessionStartTime;
-    if (dbSessionId) {
-      await endSessionDB(dbSessionId, focusScore, durationMs);
-      setDbSessionId(null);
-    }
-    endSession();
-    router.replace('/');
+  function handleExit() {
+    Alert.alert('Oyundan çıkılsın mı?', 'İlerlemen kaydedilmez.', [
+      { text: 'Devam et', style: 'cancel' },
+      { text: 'Evet, çık', style: 'destructive', onPress: () => router.replace('/') },
+    ]);
   }
 
-  if (!sessionStarted) {
+  if (phase === 'intro') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.startContainer}>
-          <Text style={styles.startEmoji}>🤖</Text>
-          <Text style={styles.title}>Robot Fabrikası</Text>
-          <Text style={styles.subtitle}>
-            Heceleri birleştir, robotları canlandır!
-          </Text>
-          <TouchableOpacity style={styles.startButton} onPress={handleStartSession}>
-            <Text style={styles.startButtonText}>Oynamaya Başla</Text>
+        <View style={styles.intro}>
+          <Text style={styles.introEmoji}>🤖</Text>
+          <Text style={styles.introTitle}>Hece Birleştirme</Text>
+          <Text style={styles.introDesc}>Kelimeyi oluşturmak için heceleri doğru sırayla seç!</Text>
+          <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+            <Text style={styles.startButtonText}>Başla</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.backLink} onPress={() => router.replace('/')}>
-            <Text style={styles.backLinkText}>← Ana Menü</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/')}>
+            <Text style={styles.backButtonText}>← Geri</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (showCompletionScreen) {
+  if (phase === 'complete') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.startContainer}>
-          <Text style={styles.startEmoji}>🎉</Text>
-          <Text style={styles.title}>Fabrika Tamamlandı!</Text>
-          <Text style={styles.subtitle}>
-            {ROBOT_TOTAL_ROUNDS} robot ürettin!
-          </Text>
-          <Text style={styles.durationText}>⏱️ Süre: {formatDuration(lastDurationMs)}</Text>
-          <TouchableOpacity style={styles.startButton} onPress={handleStartSession}>
-            <Text style={styles.startButtonText}>Tekrar Oyna</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.breakButton} onPress={handleBreak}>
-            <Text style={styles.breakButtonText}>☕ Mola Ver</Text>
+        <View style={styles.complete}>
+          <Text style={styles.completeEmoji}>🎉</Text>
+          <Text style={styles.completeTitle}>Tebrikler!</Text>
+          <Text style={styles.completeScore}>Tamamlanan: {completedCount}/{DEFAULT_CONFIG.totalRounds}</Text>
+          <TouchableOpacity style={styles.startButton} onPress={() => router.replace('/')}>
+            <Text style={styles.startButtonText}>Ana ekrana dön</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -181,101 +86,36 @@ export default function RobotFactoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.gameContainer}>
-        <View style={styles.topBar}>
-          <Stat label="Odak" value={String(focusScore)} />
-          <Stat label="Görev" value={`${completedTasks}/${ROBOT_TOTAL_ROUNDS}`} />
-          <Stat label="Mola" value={String(breakCount)} />
-        </View>
-
-        <View style={styles.gameArea}>
-          <RobotFactoryScene
-            difficulty={difficulty}
-            currentRoundIndex={currentRoundIndex}
-            totalRounds={ROBOT_TOTAL_ROUNDS}
-            onRoundComplete={handleRoundComplete}
-            onAllRoundsComplete={handleAllRoundsComplete}
-          />
-        </View>
-
-        <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.breakButton} onPress={handleBreak}>
-            <Text style={styles.breakButtonText}>☕ Mola Ver</Text>
-          </TouchableOpacity>
-        </View>
-
-        {showBreakModal && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalEmoji}>🌿</Text>
-              <Text style={styles.modalTitle}>Mola zamanı!</Text>
-              <Text style={styles.modalReason}>
-                {adaptiveReason ?? 'Biraz nefes alalım, sonra devam ederiz.'}
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalPrimaryBtn}
-                  onPress={() => {
-                    setShowBreakModal(false);
-                    handleBreak();
-                  }}>
-                  <Text style={styles.modalPrimaryText}>Mola Ver</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalSecondaryBtn}
-                  onPress={() => setShowBreakModal(false)}>
-                  <Text style={styles.modalSecondaryText}>Devam Et</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
+      <View style={styles.topBar}>
+        <Text style={styles.progress}>Görev: {currentRoundIndex + 1}/{DEFAULT_CONFIG.totalRounds}</Text>
+        <TouchableOpacity onPress={handleExit}>
+          <Text style={styles.exitBtn}>× Çık</Text>
+        </TouchableOpacity>
       </View>
+      <RobotFactoryScene
+        onWordComplete={handleWordComplete}
+        onAllRoundsComplete={handleAllRoundsComplete}
+        currentRoundIndex={currentRoundIndex}
+      />
     </SafeAreaView>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.statBox}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1a1a2e' },
-  startContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  startEmoji: { fontSize: 96, marginBottom: 16 },
-  title: { fontSize: 44, fontWeight: 'bold', color: '#ffffff', textAlign: 'center', marginBottom: 16 },
-  subtitle: { fontSize: 18, color: '#a0a0c0', textAlign: 'center', marginBottom: 16, paddingHorizontal: 16 },
-  durationText: { fontSize: 18, color: '#facc15', textAlign: 'center', marginBottom: 32 },
-  startButton: { backgroundColor: '#a855f7', paddingHorizontal: 48, paddingVertical: 20, borderRadius: 30 },
-  startButtonText: { color: '#ffffff', fontSize: 24, fontWeight: 'bold' },
-  backLink: { marginTop: 24, paddingVertical: 8 },
-  backLinkText: { color: '#a0a0c0', fontSize: 14, textDecorationLine: 'underline' },
-  gameContainer: { flex: 1 },
-  topBar: { flexDirection: 'row', justifyContent: 'space-around', padding: 16, backgroundColor: '#16213e' },
-  statBox: { alignItems: 'center' },
-  statLabel: { color: '#a0a0c0', fontSize: 14 },
-  statValue: { color: '#ffffff', fontSize: 24, fontWeight: 'bold' },
-  gameArea: { flex: 1 },
-  bottomBar: { padding: 16, alignItems: 'center' },
-  breakButton: { backgroundColor: '#2d2d44', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 20, marginTop: 16 },
-  breakButtonText: { color: '#a0a0c0', fontSize: 18 },
-  modalOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center', alignItems: 'center', padding: 24,
-  },
-  modalCard: { backgroundColor: '#16213e', borderRadius: 24, padding: 32, alignItems: 'center', maxWidth: 480, width: '90%' },
-  modalEmoji: { fontSize: 64, marginBottom: 16 },
-  modalTitle: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', marginBottom: 12, textAlign: 'center' },
-  modalReason: { fontSize: 16, color: '#a0a0c0', textAlign: 'center', marginBottom: 24, lineHeight: 24 },
-  modalButtons: { flexDirection: 'row', gap: 12 },
-  modalPrimaryBtn: { backgroundColor: '#4630EB', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20 },
-  modalPrimaryText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  modalSecondaryBtn: { backgroundColor: '#2d2d44', paddingHorizontal: 24, paddingVertical: 14, borderRadius: 20 },
-  modalSecondaryText: { color: '#a0a0c0', fontSize: 16 },
+  intro: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 },
+  introEmoji: { fontSize: 96 },
+  introTitle: { fontSize: 32, fontWeight: 'bold', color: '#ffffff' },
+  introDesc: { fontSize: 18, color: '#a0a0c0', textAlign: 'center', paddingHorizontal: 24 },
+  startButton: { backgroundColor: '#4630EB', paddingHorizontal: 48, paddingVertical: 18, borderRadius: 16, marginTop: 24 },
+  startButtonText: { color: '#ffffff', fontSize: 22, fontWeight: 'bold' },
+  backButton: { marginTop: 12, padding: 12 },
+  backButtonText: { color: '#a0a0c0', fontSize: 16 },
+  complete: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 },
+  completeEmoji: { fontSize: 120 },
+  completeTitle: { fontSize: 36, fontWeight: 'bold', color: '#ffffff' },
+  completeScore: { fontSize: 28, color: '#22c55e', fontWeight: '600', marginBottom: 24 },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#16213e' },
+  progress: { color: '#ffffff', fontSize: 16, fontWeight: '600' },
+  exitBtn: { color: '#a0a0c0', fontSize: 16, fontWeight: '600' },
 });

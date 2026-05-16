@@ -1,45 +1,20 @@
-export type BubblesDifficulty = 'easy' | 'medium' | 'hard';
-
-export type BubbleTargetType = 'vowels' | 'single_letter';
-
-export type RoundTarget = {
-  type: BubbleTargetType;
-  letters: string[];      // hedef harfler
-  description: string;    // "Sesli harfler" gibi
-};
-
 export type Bubble = {
   id: string;
   letter: string;
-  startX: number; // 0..1 yatay pozisyon
-  isTarget: boolean;
+  isVowel: boolean;
+  // ekran konumu: 0 (alt) -> 1 (üst)
   spawnedAt: number;
 };
 
-export type BubblesRound = {
-  targetIndex: number;        // ROUND_TARGETS dizisindeki index
-  target: RoundTarget;
-  poppedTargets: number;
-  totalTargetsNeeded: number;
-  startedAt: number;
-};
-
-export type BubbleTapResult = {
-  tappedLetter: string;
-  isTarget: boolean;
-  reactionTimeMs: number;
-};
+export type BubbleTapResult =
+  | { type: 'correct_hit'; letter: string; reactionTimeMs: number }
+  | { type: 'commission'; letter: string; reactionTimeMs: number } // sessize dokundu
+  | { type: 'correct_reject'; letter: string }                       // sessize dokunmadı, geçti
+  | { type: 'omission'; letter: string };                            // sesliyi kaçırdı
 
 export type BubblesConfig = {
-  totalRounds: number;
-  targetsPerRound: number;
-  spawnIntervalMs: number;
-  riseDurationMs: number;
-  difficulty: BubblesDifficulty;
-};
-
-export type BubblesDifficultySettings = {
-  spawnIntervalMs: number;
-  riseDurationMs: number;
-  targetsPerRound: number;
+  durationMs: number;       // toplam oyun süresi
+  spawnIntervalMs: number;  // baloncuk üretim aralığı
+  bubbleLifetimeMs: number; // baloncuğun ekranda kalma süresi
+  vowelProbability: number; // 0-1 arası sesli üretim olasılığı
 };
