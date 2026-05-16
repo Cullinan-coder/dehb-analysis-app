@@ -40,8 +40,8 @@ export default function OnboardingScreen() {
       Alert.alert('Eksik bilgi', 'Lütfen çocuğun adını girin.');
       return;
     }
-    if (isNaN(ageNum) || ageNum < 4 || ageNum > 18) {
-      Alert.alert('Geçersiz yaş', 'Lütfen 4 ile 18 arasında bir yaş girin.');
+    if (isNaN(ageNum) || ageNum < 6 || ageNum > 12) {
+      Alert.alert('Geçersiz yaş', 'Bu test 6-12 yaş aralığı için tasarlanmıştır.');
       return;
     }
     if (!trimmedParentName) {
@@ -110,7 +110,7 @@ export default function OnboardingScreen() {
                 style={styles.input}
                 value={age}
                 onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ''))}
-                placeholder="4-18 arası"
+                placeholder="6-12 arası"
                 placeholderTextColor="#6b7280"
                 keyboardType="number-pad"
                 maxLength={2}

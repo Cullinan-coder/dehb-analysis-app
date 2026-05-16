@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const completedGames = useGameStore((s) => s.completedGames);
   const setCompletedGames = useGameStore((s) => s.setCompletedGames);
   const setScoreRowId = useGameStore((s) => s.setScoreRowId);
+  const reset = useGameStore((s) => s.reset);
 
   const [loading, setLoading] = useState(true);
 
@@ -84,6 +85,10 @@ export default function HomeScreen() {
   }
 
   if (allCompleted) {
+    const handleRestart = () => {
+      reset();
+      router.replace('/onboarding');
+    };
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.scroll}>
@@ -92,6 +97,9 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>Tebrikler!</Text>
             <Text style={styles.subtitle}>Tüm oyunları tamamladın. Simülasyon sona erdi!</Text>
           </View>
+          <TouchableOpacity style={styles.restartButton} onPress={handleRestart}>
+            <Text style={styles.restartButtonText}>🔄 Yeni Simülasyon Başlat</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
             <Text style={styles.devLinkText}>🔧 Geliştirme Test Ekranı</Text>
           </TouchableOpacity>
@@ -208,4 +216,22 @@ const styles = StyleSheet.create({
   activeBadgeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
   devLink: { marginTop: 32, alignSelf: 'center', paddingVertical: 8 },
   devLinkText: { color: '#a0a0c0', fontSize: 14, textDecorationLine: 'underline' },
+  restartButton: {
+    backgroundColor: '#4630EB',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignSelf: 'center',
+    marginTop: 24,
+    elevation: 4,
+    shadowColor: '#4630EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+  },
+  restartButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
 });

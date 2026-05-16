@@ -2,7 +2,7 @@ import { RhythmConfig, BeatResult } from './types';
 
 export const DEFAULT_CONFIG: RhythmConfig = {
   totalBeats: 20,
-  beatIntervalMs: 1200,
+  beatIntervalMs: 1400,
   perfectThresholdMs: 150,
   goodThresholdMs: 300,
   okThresholdMs: 500,

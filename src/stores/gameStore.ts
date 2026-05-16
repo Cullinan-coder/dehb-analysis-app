@@ -83,6 +83,8 @@ export const useGameStore = create<GameState>((set) => ({
   })),
 
   reset: () => set({
+    childId: null,
+    childAge: null,
     sessionId: null,
     sessionStarted: false,
     scoreRowId: null,

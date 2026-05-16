@@ -117,8 +117,11 @@ export function RobotFactoryScene({ onWordComplete, onAllRoundsComplete, current
 
       <View style={styles.choicesGrid}>
         {round.choices.map((syllable, idx) => {
-          const isUsed = builtSyllables.filter((s) => s === syllable).length >=
-                         round.correctSyllables.filter((s) => s === syllable).length;
+          const isCorrectSyllable = round.correctSyllables.includes(syllable);
+          const usedCount = builtSyllables.filter((s) => s === syllable).length;
+          const allowedCount = round.correctSyllables.filter((s) => s === syllable).length;
+          // Sadece doğru heceler "tüketilebilir". Yanlış heceler her zaman tıklanabilir.
+          const isUsed = isCorrectSyllable && usedCount >= allowedCount;
           return (
             <TouchableOpacity
               key={`${currentRoundIndex}-${idx}`}
