@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated';
-import { spawnBubble, DEFAULT_CONFIG, isVowel } from './logic';
+import { spawnBubble, DEFAULT_CONFIG } from './logic';
 import { Bubble, BubbleTapResult } from './types';
 
 type Props = {

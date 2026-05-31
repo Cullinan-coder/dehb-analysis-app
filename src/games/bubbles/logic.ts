@@ -1,13 +1,14 @@
 import { BubblesConfig, Bubble } from './types';
+import { GAME_CONFIG } from '../../config/demoMode';
 
 const TURKISH_VOWELS = ['A', 'E', 'I', 'İ', 'O', 'Ö', 'U', 'Ü'];
 const TURKISH_CONSONANTS = ['B', 'C', 'Ç', 'D', 'F', 'G', 'Ğ', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'Ş', 'T', 'V', 'Y', 'Z'];
 
 export const DEFAULT_CONFIG: BubblesConfig = {
-  durationMs: 45000,        // 45 saniye
-  spawnIntervalMs: 1100,    // ~saniyede 1 baloncuk
-  bubbleLifetimeMs: 3500,   // 3.5 sn ekranda kal
-  vowelProbability: 0.4,    // %40 sesli, %60 sessiz (No-Go fazla → inhibisyon ölç)
+  durationMs: GAME_CONFIG.bubbles.durationMs,
+  spawnIntervalMs: 1100,
+  bubbleLifetimeMs: 3500,
+  vowelProbability: 0.4,
 };
 
 export function isVowel(letter: string): boolean {

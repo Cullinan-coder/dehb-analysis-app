@@ -1,6 +1,16 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+
+const storage =
+  Platform.OS === 'web'
+    ? createJSONStorage(() => localStorage)
+    : createJSONStorage(() => AsyncStorage);
 
 interface GameState {
+  _hasHydrated: boolean;
+
   // Çocuk bilgisi
   childId: string | null;
   childAge: number | null;
@@ -23,6 +33,7 @@ interface GameState {
   };
 
   // Aksiyonlar
+  setHasHydrated: (v: boolean) => void;
   setChild: (id: string, age: number) => void;
   startSession: (sessionId: string) => void;
   endSession: () => void;
@@ -34,69 +45,87 @@ interface GameState {
   reset: () => void;
 }
 
-export const useGameStore = create<GameState>((set) => ({
-  childId: null,
-  childAge: null,
-  scoreRowId: null,
-  sessionId: null,
-  sessionStarted: false,
-  completedTasks: 0,
-  totalTasks: 10,
-  breakCount: 0,
-  completedGames: {
-    game1: false,
-    game2: false,
-    game3: false,
-    game4: false,
-    game5: false,
-  },
+export const useGameStore = create<GameState>()(
+  persist(
+    (set) => ({
+      _hasHydrated: false,
+      childId: null,
+      childAge: null,
+      scoreRowId: null,
+      sessionId: null,
+      sessionStarted: false,
+      completedTasks: 0,
+      totalTasks: 10,
+      breakCount: 0,
+      completedGames: {
+        game1: false,
+        game2: false,
+        game3: false,
+        game4: false,
+        game5: false,
+      },
 
-  setChild: (id, age) => set({ childId: id, childAge: age }),
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
 
-  startSession: (sessionId) => set({
-    sessionId,
-    sessionStarted: true,
-    completedTasks: 0,
-    totalTasks: 10,
-    breakCount: 0,
-  }),
+      setChild: (id, age) => set({ childId: id, childAge: age }),
 
-  endSession: () => set({
-    sessionId: null,
-    sessionStarted: false,
-  }),
+      startSession: (sessionId) => set({
+        sessionId,
+        sessionStarted: true,
+        completedTasks: 0,
+        totalTasks: 10,
+        breakCount: 0,
+      }),
 
-  completeTask: () => set((state) => ({
-    completedTasks: state.completedTasks + 1,
-  })),
+      endSession: () => set({
+        sessionId: null,
+        sessionStarted: false,
+      }),
 
-  incrementBreak: () => set((state) => ({
-    breakCount: state.breakCount + 1,
-  })),
+      completeTask: () => set((state) => ({
+        completedTasks: state.completedTasks + 1,
+      })),
 
-  setScoreRowId: (id) => set({ scoreRowId: id }),
+      incrementBreak: () => set((state) => ({
+        breakCount: state.breakCount + 1,
+      })),
 
-  setCompletedGames: (games) => set({ completedGames: games }),
+      setScoreRowId: (id) => set({ scoreRowId: id }),
 
-  markGameCompleted: (slot) => set((state) => ({
-    completedGames: { ...state.completedGames, [slot]: true },
-  })),
+      setCompletedGames: (games) => set({ completedGames: games }),
 
-  reset: () => set({
-    childId: null,
-    childAge: null,
-    sessionId: null,
-    sessionStarted: false,
-    scoreRowId: null,
-    completedTasks: 0,
-    totalTasks: 10,
-    breakCount: 0,
-    completedGames: {
-      game1: false,
-      game2: false,
-      game3: false,
-      game4: false,
-      game5: false,
-    },
-  }),
-}));
+      markGameCompleted: (slot) => set((state) => ({
+        completedGames: { ...state.completedGames, [slot]: true },
+      })),
+
+      reset: () => set({
+        childId: null,
+        childAge: null,
+        sessionId: null,
+        sessionStarted: false,
+        scoreRowId: null,
+        completedTasks: 0,
+        totalTasks: 10,
+        breakCount: 0,
+        completedGames: {
+          game1: false,
+          game2: false,
+          game3: false,
+          game4: false,
+          game5: false,
+        },
+      }),
+    }),
+    {
+      name: 'dehb-game-store',
+      storage,
+      partialize: (state) => ({
+        childId: state.childId,
+        scoreRowId: state.scoreRowId,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
+  )
+);

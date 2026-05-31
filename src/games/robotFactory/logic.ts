@@ -1,9 +1,10 @@
 import { RobotFactoryConfig, RobotFactoryRound } from './types';
 import { WORD_LIST, WordEntry } from './wordList';
+import { GAME_CONFIG } from '../../config/demoMode';
 
 export const DEFAULT_CONFIG: RobotFactoryConfig = {
-  totalRounds: 10,
-  roundTimeoutMs: 20000,
+  totalRounds: GAME_CONFIG.robotFactory.totalWords,
+  roundTimeoutMs: GAME_CONFIG.robotFactory.roundTimeoutMs,
   distractorCount: 3,
 };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,23 @@ export default function OnboardingScreen() {
   const [parentName, setParentName] = useState('');
   const [parentEmail, setParentEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const titleTapsRef = useRef<number[]>([]);
+
+  // Geliştirme yardımcısı: başlığa 3 kez dokun → formu örnek verilerle doldur.
+  // Sadece __DEV__ ortamında çalışır; production build'lerinde noop.
+  function handleTitlePress() {
+    if (!__DEV__) return;
+    const now = Date.now();
+    titleTapsRef.current = [...titleTapsRef.current, now].filter((t) => now - t < 3000);
+    if (titleTapsRef.current.length >= 3) {
+      titleTapsRef.current = [];
+      setChildName('Demo Çocuk');
+      setAge('9');
+      setParentName('Test Veli');
+      setParentEmail('demo@example.com');
+    }
+  }
 
   function isValidEmail(value: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -82,7 +99,9 @@ export default function OnboardingScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Text style={styles.emoji}>🌟</Text>
-            <Text style={styles.title}>Hoş Geldiniz!</Text>
+            <TouchableOpacity onPress={handleTitlePress} activeOpacity={1}>
+              <Text style={styles.title}>Hoş Geldiniz!</Text>
+            </TouchableOpacity>
             <Text style={styles.subtitle}>
               Veli denetiminde bir DEHB analiz oturumu başlatmak için lütfen bilgileri doldurun.
             </Text>
@@ -97,7 +116,7 @@ export default function OnboardingScreen() {
                 style={styles.input}
                 value={childName}
                 onChangeText={setChildName}
-                placeholder="Örn: Ahmet"
+                placeholder="💡 Örn: Ahmet"
                 placeholderTextColor="#6b7280"
                 autoCapitalize="words"
                 editable={!submitting}

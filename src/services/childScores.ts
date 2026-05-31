@@ -34,16 +34,20 @@ export async function getChildScores(childId: string): Promise<{
     console.error('[ChildScores] Invalid childId:', childId);
     return null;
   }
-  const { data, error } = await supabase
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+  const query = supabase
     .from('child_scores')
     .select('id, child_id, age, game1, game2, game3, game4, game5')
     .eq('child_id', rawChildId)
-    .maybeSingle();
-  if (error) {
-    console.error('[ChildScores] getChildScores failed:', error);
-    return null;
-  }
-  return data;
+    .maybeSingle()
+    .then(({ data, error }) => {
+      if (error) {
+        console.error('[ChildScores] getChildScores failed:', error);
+        return null;
+      }
+      return data;
+    });
+  return Promise.race([query, timeout]);
 }
 
 /**
@@ -80,7 +84,6 @@ export async function upsertGameScore(params: {
       console.error('[ChildScores] INSERT failed:', error);
       return { scoreRowId: null, error: error.message };
     }
-    console.log(`[ChildScores] New row: ${data.id}, ${slot}=${finalScore} (perf=${clampedPerformance})`);
     return { scoreRowId: data.id };
   }
 
@@ -92,6 +95,5 @@ export async function upsertGameScore(params: {
     console.error('[ChildScores] UPDATE failed:', error);
     return { scoreRowId: params.scoreRowId, error: error.message };
   }
-  console.log(`[ChildScores] Updated ${params.scoreRowId}: ${slot}=${finalScore} (perf=${clampedPerformance})`);
   return { scoreRowId: params.scoreRowId };
 }

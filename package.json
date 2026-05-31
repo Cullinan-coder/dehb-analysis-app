@@ -2,16 +2,42 @@
   "name": "dehb-platform",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "description": "7-12 yaş çocuklar için 5 nöropsikolojik mini oyun ile bilişsel ön-tarama yapan, AI destekli klinik yorumlama içeren mobil DEHB değerlendirme platformu.",
+  "keywords": [
+    "adhd",
+    "dehb",
+    "healthtech",
+    "cognitive-assessment",
+    "react-native",
+    "expo",
+    "supabase",
+    "neuropsychology",
+    "child-development"
+  ],
+  "author": "All Craft Vision <hello@allcraftvision.com> (https://allcraftvision.com)",
+  "license": "MIT",
+  "homepage": "https://github.com/Cullinan-coder/dehb-analysis-app#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cullinan-coder/dehb-analysis-app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cullinan-coder/dehb-analysis-app/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "reset-project": "node ./scripts/reset-project.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.10",
     "@react-navigation/native": "^7.1.33",
@@ -44,6 +70,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~55.0.1",
     "typescript": "~5.9.2"
   },
   "private": true

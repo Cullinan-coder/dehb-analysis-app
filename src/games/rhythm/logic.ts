@@ -1,8 +1,9 @@
 import { RhythmConfig, BeatResult } from './types';
+import { GAME_CONFIG } from '../../config/demoMode';
 
 export const DEFAULT_CONFIG: RhythmConfig = {
-  totalBeats: 20,
-  beatIntervalMs: 1400,
+  totalBeats: GAME_CONFIG.rhythm.totalBeats,
+  beatIntervalMs: GAME_CONFIG.rhythm.beatIntervalMs,
   perfectThresholdMs: 150,
   goodThresholdMs: 300,
   okThresholdMs: 500,

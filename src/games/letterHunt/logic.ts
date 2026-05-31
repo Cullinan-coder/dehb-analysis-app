@@ -1,4 +1,5 @@
 import { LetterHuntConfig, LetterHuntRound, LetterChoice } from './types';
+import { GAME_CONFIG } from '../../config/demoMode';
 
 const TURKISH_ALPHABET = [
   'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'İ', 'K',
@@ -6,9 +7,9 @@ const TURKISH_ALPHABET = [
 ];
 
 export const DEFAULT_CONFIG: LetterHuntConfig = {
-  totalRounds: 10,
+  totalRounds: GAME_CONFIG.letterHunt.totalRounds,
   choicesPerRound: 6,
-  roundTimeoutMs: 10000,
+  roundTimeoutMs: GAME_CONFIG.letterHunt.roundTimeoutMs,
   alphabet: TURKISH_ALPHABET,
 };
 

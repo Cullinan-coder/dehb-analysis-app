@@ -37,6 +37,11 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# IDE / tooling local overrides
+.claude/settings.local.json
+.vscode/settings.json
+.idea/
+
 app-example
 
 # generated native folders

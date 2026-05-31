@@ -1,9 +1,10 @@
 import { FlexConfig, FlexRound, FlexItem, RuleType, ItemColor, ItemShape } from './types';
+import { GAME_CONFIG } from '../../config/demoMode';
 
 export const DEFAULT_CONFIG: FlexConfig = {
-  totalRounds: 15,
-  roundsPerPhase: 5,
-  roundTimeoutMs: 8000,
+  totalRounds: GAME_CONFIG.flexibility.totalRounds,
+  roundsPerPhase: GAME_CONFIG.flexibility.roundsPerPhase,
+  roundTimeoutMs: GAME_CONFIG.flexibility.roundTimeoutMs,
   perseverationWindow: 2,
 };
 

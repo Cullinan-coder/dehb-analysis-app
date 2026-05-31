@@ -25,15 +25,25 @@ const GAMES: GameCard[] = [
 
 export default function HomeScreen() {
   const childId = useGameStore((s) => s.childId);
+  const _hasHydrated = useGameStore((s) => s._hasHydrated);
   const completedGames = useGameStore((s) => s.completedGames);
   const setCompletedGames = useGameStore((s) => s.setCompletedGames);
   const setScoreRowId = useGameStore((s) => s.setScoreRowId);
   const reset = useGameStore((s) => s.reset);
 
   const [loading, setLoading] = useState(true);
+  const [forceReady, setForceReady] = useState(false);
 
   useEffect(() => {
+    const t = setTimeout(() => setForceReady(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!_hasHydrated && !forceReady) return;
+
     if (!childId) {
+      setLoading(false);
       router.replace('/onboarding');
       return;
     }
@@ -52,7 +62,6 @@ export default function HomeScreen() {
           game5: row.game5 !== null,
         });
       } else {
-        // Henüz hiç oyun oynanmamış
         setScoreRowId(null);
         setCompletedGames({
           game1: false, game2: false, game3: false, game4: false, game5: false,
@@ -60,7 +69,7 @@ export default function HomeScreen() {
       }
       setLoading(false);
     })();
-  }, [childId]);
+  }, [childId, _hasHydrated, forceReady]);
 
   // Sıradaki aktif oyun: ilk false olan slot
   const nextActiveSlot: GameSlot | null = (() => {
@@ -72,6 +81,17 @@ export default function HomeScreen() {
   })();
 
   const allCompleted = nextActiveSlot === null;
+
+  if (!_hasHydrated && !forceReady) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color="#4630EB" />
+          <Text style={styles.loaderText}>Hazırlanıyor...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (loading) {
     return (
@@ -96,13 +116,18 @@ export default function HomeScreen() {
             <Text style={styles.completedEmoji}>🏆</Text>
             <Text style={styles.greeting}>Tebrikler!</Text>
             <Text style={styles.subtitle}>Tüm oyunları tamamladın. Simülasyon sona erdi!</Text>
+            <View style={styles.reportBadge}>
+              <Text style={styles.reportBadgeText}>Klinik rapor velinize gönderildi</Text>
+            </View>
           </View>
           <TouchableOpacity style={styles.restartButton} onPress={handleRestart}>
             <Text style={styles.restartButtonText}>🔄 Yeni Simülasyon Başlat</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
-            <Text style={styles.devLinkText}>🔧 Geliştirme Test Ekranı</Text>
-          </TouchableOpacity>
+          {__DEV__ && (
+            <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
+              <Text style={styles.devLinkText}>🔧 Geliştirme Test Ekranı</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </SafeAreaView>
     );
@@ -160,9 +185,11 @@ export default function HomeScreen() {
           })}
         </View>
 
-        <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
-          <Text style={styles.devLinkText}>🔧 Geliştirme Test Ekranı</Text>
-        </TouchableOpacity>
+        {__DEV__ && (
+          <TouchableOpacity style={styles.devLink} onPress={() => router.push('/dev-test')}>
+            <Text style={styles.devLinkText}>🔧 Geliştirme Test Ekranı</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -233,5 +260,17 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '700',
+  },
+  reportBadge: {
+    backgroundColor: '#e8f5e9',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  reportBadgeText: {
+    color: '#2e7d32',
+    fontSize: 13,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
 });
